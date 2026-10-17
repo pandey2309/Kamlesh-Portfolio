@@ -1,9 +1,19 @@
 export function validateEnvironment() {
-  const required = ['JWT_SECRET', 'ADMIN_USERNAME', 'ADMIN_PASSWORD_HASH']
+  const required = ['DATABASE_URL', 'JWT_SECRET', 'ADMIN_USERNAME', 'ADMIN_PASSWORD_HASH']
   const missing = required.filter(name => !process.env[name])
 
   if (missing.length) {
     throw new Error(`Missing required environment variables: ${missing.join(', ')}`)
+  }
+
+  let databaseUrl
+  try {
+    databaseUrl = new URL(process.env.DATABASE_URL)
+  } catch {
+    throw new Error('DATABASE_URL must be a valid PostgreSQL connection string.')
+  }
+  if (!['postgres:', 'postgresql:'].includes(databaseUrl.protocol)) {
+    throw new Error('DATABASE_URL must use the postgres:// or postgresql:// protocol.')
   }
 
   if (process.env.JWT_SECRET.length < 32) {

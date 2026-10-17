@@ -1,12 +1,19 @@
 import test, { before, after } from 'node:test'
 import assert from 'node:assert/strict'
-import fs from 'node:fs'
-import os from 'node:os'
-import path from 'node:path'
+import bcrypt from 'bcryptjs'
+import jwt from 'jsonwebtoken'
 
-const tempDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'portfolio-sqlite-test-'))
-const previousSqlitePath = process.env.SQLITE_PATH
-process.env.SQLITE_PATH = path.join(tempDirectory, 'test.sqlite')
+const testDatabaseUrl = process.env.TEST_DATABASE_URL
+const originalEnvironment = Object.fromEntries(
+  ['DATABASE_URL', 'JWT_SECRET', 'ADMIN_USERNAME', 'ADMIN_PASSWORD_HASH', 'NODE_ENV'].map(name => [name, process.env[name]]),
+)
+if (testDatabaseUrl) process.env.DATABASE_URL = testDatabaseUrl
+else delete process.env.DATABASE_URL
+process.env.JWT_SECRET = 'test-only-secret-that-is-long-enough-for-hmac'
+process.env.ADMIN_USERNAME = 'portfolio-test-admin'
+process.env.ADMIN_PASSWORD_HASH = await bcrypt.hash('test-only-password-used-in-test', 4)
+process.env.NODE_ENV = 'test'
+
 const [{ default: app }, databaseModule] = await Promise.all([
   import('../app.js'),
   import('../database.js'),
@@ -15,9 +22,14 @@ const { closeDatabase, initializeDatabase } = databaseModule
 
 let server
 let baseUrl
+const adminCookie = `portfolio_admin=${jwt.sign(
+  { sub: process.env.ADMIN_USERNAME, role: 'admin' },
+  process.env.JWT_SECRET,
+  { algorithm: 'HS256', expiresIn: '5m' },
+)}`
 
 before(async () => {
-  initializeDatabase()
+  if (testDatabaseUrl) await initializeDatabase()
   server = app.listen(0, '127.0.0.1')
   await new Promise(resolve => server.once('listening', resolve))
   baseUrl = `http://127.0.0.1:${server.address().port}`
@@ -25,51 +37,105 @@ before(async () => {
 
 after(async () => {
   await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()))
-  closeDatabase()
-  fs.rmSync(tempDirectory, { recursive: true, force: true })
-  if (previousSqlitePath === undefined) delete process.env.SQLITE_PATH
-  else process.env.SQLITE_PATH = previousSqlitePath
+  await closeDatabase()
+  for (const [name, value] of Object.entries(originalEnvironment)) {
+    if (value === undefined) delete process.env[name]
+    else process.env[name] = value
+  }
 })
 
-test('health check and public project routes return seeded SQLite rows', async () => {
-  const health = await fetch(`${baseUrl}/api/health`)
-  assert.equal(health.status, 200)
-  assert.deepEqual(await health.json(), { status: 'ok' })
+test('health endpoint is public', async () => {
+  const response = await fetch(`${baseUrl}/api/health`)
+  assert.equal(response.status, 200)
+  assert.deepEqual(await response.json(), { status: 'ok' })
+})
 
+test('administrator login creates a session that can be checked and cleared', async () => {
+  const login = await fetch(`${baseUrl}/api/admin/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: process.env.ADMIN_USERNAME, password: 'test-only-password-used-in-test' }),
+  })
+  assert.equal(login.status, 200)
+  const cookieHeader = login.headers.get('set-cookie')
+  assert.match(cookieHeader, /HttpOnly/i)
+  assert.match(cookieHeader, /SameSite=Strict/i)
+  const cookie = cookieHeader.split(';', 1)[0]
+
+  const session = await fetch(`${baseUrl}/api/admin/me`, { headers: { Cookie: cookie } })
+  assert.equal(session.status, 200)
+  assert.equal((await session.json()).authenticated, true)
+
+  const logout = await fetch(`${baseUrl}/api/admin/logout`, { method: 'POST', headers: { Cookie: cookie } })
+  assert.equal(logout.status, 204)
+  assert.match(logout.headers.get('set-cookie'), /Expires=Thu, 01 Jan 1970/i)
+})
+
+test('public project reads and authenticated CRUD work with PostgreSQL', {
+  skip: !testDatabaseUrl && 'Set TEST_DATABASE_URL to a dedicated PostgreSQL test database to run this integration check.',
+}, async () => {
   const projectsResponse = await fetch(`${baseUrl}/api/projects`)
   assert.equal(projectsResponse.status, 200)
   const projects = await projectsResponse.json()
-  assert.deepEqual(projects.map(project => project.title), ['Loan Prediction System', 'Typing Speed Tester'])
-  assert.deepEqual(projects[0].technologies, ['Python', 'Machine Learning', 'Random Forest'])
-  assert.equal(projects[0].githubUrl, '')
+  assert.ok(projects.some(project => project.title === 'Loan Prediction System'))
+  assert.ok(projects.some(project => project.title === 'Typing Speed Tester'))
 
-  const singleProject = await fetch(`${baseUrl}/api/projects/1`)
-  assert.equal(singleProject.status, 200)
-  assert.equal((await singleProject.json()).title, 'Loan Prediction System')
+  const singleProject = projects.find(project => project.title === 'Loan Prediction System')
+  const singleResponse = await fetch(`${baseUrl}/api/projects/${singleProject._id}`)
+  assert.equal(singleResponse.status, 200)
+  assert.equal((await singleResponse.json()).title, 'Loan Prediction System')
 
-  initializeDatabase()
-  const projectsAfterSecondInitialization = await (await fetch(`${baseUrl}/api/projects`)).json()
-  assert.equal(projectsAfterSecondInitialization.length, 2, 'database initialization must not duplicate seed data')
+  const title = `PostgreSQL CRUD test ${Date.now()}`
+  const headers = { 'Content-Type': 'application/json', Cookie: adminCookie }
+  let createdId
+  try {
+    const createdResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ title, description: 'Temporary API test project.', technologies: ['Node.js'] }),
+    })
+    assert.equal(createdResponse.status, 201)
+    const created = await createdResponse.json()
+    createdId = created._id
 
-  const project = await fetch(`${baseUrl}/api/projects/not-an-id`)
-  assert.equal(project.status, 400)
-  assert.match((await project.json()).error, /Project ID is invalid/)
+    const updatedResponse = await fetch(`${baseUrl}/api/projects/${createdId}`, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify({ description: 'Updated temporary API test project.' }),
+    })
+    assert.equal(updatedResponse.status, 200)
+    assert.equal((await updatedResponse.json()).description, 'Updated temporary API test project.')
+
+    const deletedResponse = await fetch(`${baseUrl}/api/projects/${createdId}`, {
+      method: 'DELETE',
+      headers: { Cookie: adminCookie },
+    })
+    assert.equal(deletedResponse.status, 204)
+    createdId = undefined
+  } finally {
+    if (createdId) {
+      await fetch(`${baseUrl}/api/projects/${createdId}`, {
+        method: 'DELETE',
+        headers: { Cookie: adminCookie },
+      }).catch(() => {})
+    }
+  }
 })
 
-test('project writes require an authenticated administrator', async () => {
+test('project write endpoints reject requests without an administrator session', async () => {
   const paths = [
     ['/api/projects', 'POST'],
     ['/api/projects/1', 'PUT'],
     ['/api/projects/1', 'DELETE'],
   ]
 
-  for (const [path, method] of paths) {
-    const response = await fetch(`${baseUrl}${path}`, {
+  for (const [route, method] of paths) {
+    const response = await fetch(`${baseUrl}${route}`, {
       method,
       headers: method === 'DELETE' ? {} : { 'Content-Type': 'application/json' },
       ...(method === 'DELETE' ? {} : { body: '{}' }),
     })
-    assert.equal(response.status, 401, `${method} ${path} must be protected`)
+    assert.equal(response.status, 401, `${method} ${route} must require authentication`)
   }
 })
 

@@ -5,11 +5,11 @@ export function notFound(req, res) {
 export function errorHandler(error, req, res, next) {
   if (res.headersSent) return next(error)
 
-  if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+  if (error.code === '23505') {
     return res.status(409).json({ error: 'A project with this title already exists.' })
   }
 
-  if (error.code?.startsWith('SQLITE_CONSTRAINT')) {
+  if (['23502', '23514', '22P02'].includes(error.code)) {
     return res.status(400).json({ error: 'Project data violates a database constraint.' })
   }
 
@@ -17,7 +17,7 @@ export function errorHandler(error, req, res, next) {
     return res.status(400).json({ error: 'Request body must contain valid JSON.' })
   }
 
-  if (!error.status || error.status >= 500) console.error(error)
+  if (!error.status || error.status >= 500) console.error('Request failed:', error.code || error.name || 'Error')
   return res.status(error.status || 500).json({
     error: error.status && error.status < 500 ? error.message : 'An unexpected server error occurred.',
   })

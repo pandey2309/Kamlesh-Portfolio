@@ -48,22 +48,22 @@ export function isValidProjectId(id) {
   return /^[1-9]\d*$/.test(id) && Number.isSafeInteger(Number(id))
 }
 
-router.get('/', (req, res) => {
-  return res.json(listProjects())
+router.get('/', async (req, res) => {
+  return res.json(await listProjects())
 })
 
-router.get('/:id', (req, res) => {
+router.get('/:id', async (req, res) => {
   if (!isValidProjectId(req.params.id)) return res.status(400).json({ error: 'Project ID is invalid.' })
-  const project = getProjectById(Number(req.params.id))
+  const project = await getProjectById(req.params.id)
   if (!project) return res.status(404).json({ error: 'Project was not found.' })
   return res.json(project)
 })
 
-router.post('/', requireAdmin, (req, res, next) => {
+router.post('/', requireAdmin, async (req, res, next) => {
   const validationError = validateProjectPayload(req.body)
   if (validationError) return res.status(400).json({ error: validationError })
   try {
-    const project = createProject({
+    const project = await createProject({
       title: req.body.title.trim(),
       description: req.body.description.trim(),
       technologies: req.body.technologies.map(item => item.trim()),
@@ -77,7 +77,7 @@ router.post('/', requireAdmin, (req, res, next) => {
   }
 })
 
-router.put('/:id', requireAdmin, (req, res, next) => {
+router.put('/:id', requireAdmin, async (req, res, next) => {
   if (!isValidProjectId(req.params.id)) return res.status(400).json({ error: 'Project ID is invalid.' })
   const validationError = validateProjectPayload(req.body, true)
   if (validationError) return res.status(400).json({ error: validationError })
@@ -86,7 +86,7 @@ router.put('/:id', requireAdmin, (req, res, next) => {
     if (updates.title) updates.title = updates.title.trim()
     if (updates.description) updates.description = updates.description.trim()
     if (updates.technologies) updates.technologies = updates.technologies.map(item => item.trim())
-    const project = updateProject(Number(req.params.id), updates)
+    const project = await updateProject(req.params.id, updates)
     if (!project) return res.status(404).json({ error: 'Project was not found.' })
     return res.json(project)
   } catch (error) {
@@ -94,10 +94,10 @@ router.put('/:id', requireAdmin, (req, res, next) => {
   }
 })
 
-router.delete('/:id', requireAdmin, (req, res, next) => {
+router.delete('/:id', requireAdmin, async (req, res, next) => {
   if (!isValidProjectId(req.params.id)) return res.status(400).json({ error: 'Project ID is invalid.' })
   try {
-    if (!deleteProject(Number(req.params.id))) return res.status(404).json({ error: 'Project was not found.' })
+    if (!await deleteProject(req.params.id)) return res.status(404).json({ error: 'Project was not found.' })
     return res.status(204).end()
   } catch (error) {
     return next(error)
