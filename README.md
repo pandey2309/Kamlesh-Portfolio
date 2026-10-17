@@ -1,4 +1,4 @@
-~# Kamlesh Pandey — Portfolio
+# Kamlesh Pandey — Portfolio
 
 A personal portfolio built with React and Vite, with an Express REST API and SQLite project storage. Visitors can read projects without signing in. Creating, editing, and deleting projects requires the administrator session.
 
