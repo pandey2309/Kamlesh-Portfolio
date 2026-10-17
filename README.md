@@ -1,101 +1,191 @@
-# Kamlesh Pandey | Portfolio
+~# Kamlesh Pandey — Portfolio
 
-A React and Vite portfolio with an Express REST API and SQLite project storage. Public visitors can view projects without signing in. Only the authenticated administrator can create, edit, or delete projects.
+A personal portfolio built with React and Vite, with an Express REST API and SQLite project storage. Visitors can read projects without signing in. Creating, editing, and deleting projects requires the administrator session.
 
 ## Requirements
 
-- Node.js 20 or newer and npm
-- VS Code (recommended for the steps below)
+- Node.js 22 or newer and npm (`better-sqlite3` 13 requires Node.js 22+)
+- VS Code is recommended, but not required
 
-No MongoDB installation or external database account is needed. The SQLite database file is created locally at `data/portfolio.sqlite` by default.
+SQLite runs locally as a file database; no MongoDB installation or database account is needed. The default file is `data/portfolio.sqlite`.
 
-## Windows and VS Code setup
+## Run locally on Windows
 
-1. Open this project folder in VS Code. Open **Terminal → New Terminal** and install dependencies:
+Open the project folder in VS Code. The commands below use two terminals: one for the API and one for Vite. In PowerShell, use `npm.cmd` if the execution policy blocks `npm`.
 
-   ```powershell
-   npm install
-   ```
+### 1. Install dependencies
 
-2. Create the private environment file (this does not overwrite an existing `.env`):
+**Command Prompt (CMD):**
 
-   ```powershell
-   if (-not (Test-Path .env)) { Copy-Item .env.example .env }
-   ```
+```bat
+npm install
+```
 
-3. Open `.env` in VS Code. Set a private administrator username. Generate a JWT secret in the terminal:
+**PowerShell:**
 
-   ```powershell
-   node -e "console.log(require('node:crypto').randomBytes(48).toString('hex'))"
-   ```
+```powershell
+npm.cmd install
+```
 
-   Copy the output into `JWT_SECRET` in `.env`. Do not put secrets in React files or commit `.env`.
+### 2. Create `.env`
 
-4. Generate the administrator password hash:
+These commands copy the example only when `.env` does not already exist.
 
-   ```powershell
-   npm run admin:hash
-   ```
+**Command Prompt (CMD):**
 
-   Enter a password of at least 12 characters when prompted; input is hidden. Copy the printed `ADMIN_PASSWORD_HASH=...` value into `.env`.
+```bat
+if not exist .env copy .env.example .env
+```
 
-5. Start the backend in this terminal:
+**PowerShell:**
 
-   ```powershell
-   npm run dev:server
-   ```
+```powershell
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+```
 
-   On first startup, the backend creates the SQLite directory and table. It inserts the two supplied sample projects only if the table is empty. Expect messages that the SQLite database is ready and the API is listening on port 5000.
+Open `.env` in your editor. Set `ADMIN_USERNAME`, then generate a random JWT secret. This command is the same in CMD and PowerShell:
 
-6. Open **Terminal → New Terminal** for the frontend:
+```text
+node -e "console.log(require('node:crypto').randomBytes(48).toString('hex'))"
+```
 
-   ```powershell
-   npm run dev
-   ```
+Copy the output into `JWT_SECRET`. Keep it private; it must be at least 32 characters.
 
-   Open the Vite URL shown in the terminal, usually `http://localhost:5173`. Vite proxies `/api` to the backend port from `PORT` in `.env` (5000 by default). You can set `API_PROXY_TARGET` to override that URL.
+### 3. Generate the administrator password hash
 
-## Verify the API and database
+Run this in an interactive terminal. Enter an administrator password of at least 12 characters; the password input is hidden.
 
-With the backend running, use a third VS Code terminal:
+**Command Prompt (CMD):**
+
+```bat
+npm run admin:hash
+```
+
+**PowerShell:**
+
+```powershell
+npm.cmd run admin:hash
+```
+
+Copy the printed `ADMIN_PASSWORD_HASH=...` line into `.env`. The application compares the entered password with this bcrypt hash; it does not store the plain password.
+
+### 4. Start the backend and frontend
+
+In the first terminal, start the Express API:
+
+**CMD:**
+
+```bat
+npm run dev:server
+```
+
+**PowerShell:**
+
+```powershell
+npm.cmd run dev:server
+```
+
+The API listens on port `5000` by default. It creates the SQLite directory and table at startup. On an empty database, it seeds the two sample projects; an existing non-empty project table is not reseeded.
+
+Open a second terminal in the project folder and start Vite:
+
+**CMD:**
+
+```bat
+npm run dev
+```
+
+**PowerShell:**
+
+```powershell
+npm.cmd run dev
+```
+
+Open the URL Vite prints, usually `http://localhost:5173`.
+
+## Open the portfolio and admin dashboard
+
+- Portfolio: `http://localhost:5173/`
+- Admin dashboard: `http://localhost:5173/admin`
+
+Sign in to the dashboard with `ADMIN_USERNAME` and the password used to create `ADMIN_PASSWORD_HASH`. The dashboard uses the API to create, edit, and delete projects. Project GitHub and live URLs are optional.
+
+## Check the API
+
+With the backend running, use a third terminal.
+
+**Command Prompt (CMD):**
+
+```bat
+curl.exe http://localhost:5000/api/health
+curl.exe http://localhost:5000/api/projects
+```
+
+**PowerShell:**
 
 ```powershell
 Invoke-RestMethod http://localhost:5000/api/health
 Invoke-RestMethod http://localhost:5000/api/projects | ConvertTo-Json -Depth 5
 ```
 
-The projects response should contain the two sample projects on a fresh database. If you deleted them and want the safe empty-database seed to run again, stop the backend and run `npm run seed:projects`; it does not overwrite or duplicate projects in a non-empty table.
-
-Open `http://localhost:5173` and scroll to Projects to see the API data. The admin dashboard is at `http://localhost:5173/admin`; sign in with the username and password configured for the administrator to add or edit projects. Project URLs are optional and remain blank unless you enter real links.
+The health endpoint returns `{ "status": "ok" }`. The projects endpoint returns the records currently in SQLite; an existing database may contain projects beyond the initial two. To seed an empty database manually, run `npm run seed:projects` (PowerShell: `npm.cmd run seed:projects`). This command does not add or replace sample data when the table already contains projects.
 
 ## Environment variables
 
-- `NODE_ENV`: `development` locally; use `production` for deployment.
-- `PORT`: Express port, defaults to `5000`.
-- `SQLITE_PATH`: optional database file path; defaults to `data/portfolio.sqlite` relative to the project.
-- `CLIENT_ORIGINS`: exact comma-separated frontend origins allowed by the API.
-- `JWT_SECRET`: random secret of at least 32 characters.
-- `ADMIN_USERNAME`: administrator sign-in name.
-- `ADMIN_PASSWORD_HASH`: bcrypt hash from `npm run admin:hash`.
-- `VITE_API_BASE_URL`: leave empty locally; set the deployed API base URL when the frontend and API are hosted separately.
-- `API_PROXY_TARGET`: optional full local API URL override for Vite's `/api` proxy.
+The backend loads `.env` at startup. Vite reads its variables when it starts or builds the frontend.
 
-## API routes
+| Variable | Purpose |
+| --- | --- |
+| `NODE_ENV` | Set to `development` locally. Set to `production` on the API host; this enables the secure admin cookie and requires `CLIENT_ORIGINS`. |
+| `PORT` | Express listen port; defaults to `5000`. |
+| `SQLITE_PATH` | Optional SQLite file path. A relative path is resolved from the process working directory. If unset, the app uses `data/portfolio.sqlite` in the project. |
+| `CLIENT_ORIGINS` | Comma-separated, exact browser origins allowed by the API, for example `https://portfolio.example.com`. In production this must not be empty. Do not add a path or trailing slash. Locally the server defaults to the two Vite origins on port 5173. |
+| `JWT_SECRET` | Required signing secret, at least 32 characters. Generate a private random value as shown above. |
+| `ADMIN_USERNAME` | Required administrator sign-in name. |
+| `ADMIN_PASSWORD_HASH` | Required bcrypt hash generated by `npm run admin:hash`. |
+| `VITE_API_BASE_URL` | Optional frontend API base URL. Leave empty for the default `/api` path. For a separately hosted API, set this at frontend build time to the API URL including `/api`, such as `https://api.example.com/api`. This value is included in the public frontend bundle; never put secrets in a `VITE_` variable. |
+| `API_PROXY_TARGET` | Optional Vite development proxy target. Defaults to `http://127.0.0.1:<PORT>` (or port 5000). It affects Vite development, not a deployed static frontend. |
 
-- `GET /api/projects` and `GET /api/projects/:id` — public project reads.
-- `POST /api/projects`, `PUT /api/projects/:id`, and `DELETE /api/projects/:id` — administrator-only writes.
-- `POST /api/admin/login`, `POST /api/admin/logout`, and `GET /api/admin/me` — administrator session.
-- `GET /api/health` — API health check.
+## REST API
 
-The project table stores title, description, technologies (as JSON text), GitHub URL, live URL, featured status, and timestamps. SQLite integer IDs are returned as strings in `_id` to preserve the existing admin interface.
+Project IDs are positive SQLite integer IDs, returned as strings in `_id` for the existing frontend.
 
-## Production
+| Method and path | Access | Purpose |
+| --- | --- | --- |
+| `GET /api/health` | Public | Health check. |
+| `GET /api/projects` | Public | List projects. |
+| `GET /api/projects/:id` | Public | Read one project. |
+| `POST /api/projects` | Administrator | Create a project. |
+| `PUT /api/projects/:id` | Administrator | Update a project. |
+| `DELETE /api/projects/:id` | Administrator | Delete a project. |
+| `POST /api/admin/login` | Public sign-in endpoint | Authenticate and set the admin session cookie. |
+| `POST /api/admin/logout` | Public | Clear the admin cookie. |
+| `GET /api/admin/me` | Administrator | Return the current signed-in administrator. |
 
-Set the auth and origin environment variables in the hosting dashboard; do not deploy `.env`. The host must provide persistent disk storage for the SQLite file, or set `SQLITE_PATH` to a persistent mounted path. Publish the frontend `dist/` folder and configure the static host to rewrite `/admin` to `index.html`. Use HTTPS so the administrator cookie remains secure. Start the API with `npm start`.
+Project writes accept `title`, `description`, `technologies` (an array of strings), optional `githubUrl` and `liveUrl` strings, and optional `featured` (boolean). Project responses also include `createdAt` and `updatedAt`.
 
-## Checks
+## Build, checks, and production start
 
-```powershell
+Run the backend syntax checks and test suite:
+
+```text
 npm run check:server
+```
+
+Build the Vite frontend:
+
+```text
 npm run build
 ```
+
+The build output is `dist/`. `npm run preview` serves that build locally for review; it does not start the Express API. `npm start` starts the Express API only. A deployment must provide static hosting for `dist/` (or equivalent routing) as well as run the API.
+
+## GitHub and deployment
+
+The repository ignore rules exclude `.env`, `.env.*` (except `.env.example`), `node_modules/`, `dist/`, and `data/`. Keep real secrets and the SQLite database out of GitHub. Commit `.env.example` with placeholder values only. Before pushing, review `git status` and confirm no credentials, database files, generated secrets, or private data are staged.
+
+For deployment, configure the API environment variables in the hosting provider’s secret/environment settings; do not upload `.env`. Build the frontend with `npm run build`, publish `dist/`, and run the backend with `npm start`. The Express app does not serve the Vite frontend itself. Configure the frontend host so `/admin` falls back to `index.html`, and route `/api/*` to Express if using a single public origin.
+
+SQLite persistence depends on the provider. Before choosing a host, confirm it offers a persistent disk or volume, mount it, and set `SQLITE_PATH` to a file on that storage. Ephemeral filesystems can lose the database on restart or redeploy. If the provider does not offer persistent storage, this app’s SQLite database cannot safely serve as durable project storage there; choose a host with persistent disk support or plan a database change separately.
+
+The admin cookie is `HttpOnly`, `Secure` in production, and `SameSite=Strict`. The simplest compatible layout is to serve the frontend and `/api` from one origin. A separate frontend and API can also work when both use HTTPS under the same site (for example, `portfolio.example.com` and `api.example.com`), with `VITE_API_BASE_URL` and `CLIENT_ORIGINS` set accordingly. Different registrable domains may block the strict cookie in browsers; this code does not configure cross-site cookies. Choose the domain and routing layout before deployment.
