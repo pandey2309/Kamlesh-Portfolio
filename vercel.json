@@ -1,0 +1,16 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://kamlesh-portfolio-17kj.onrender.com/api/:path*"
+    },
+    {
+      "source": "/api",
+      "destination": "https://kamlesh-portfolio-17kj.onrender.com/api"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}

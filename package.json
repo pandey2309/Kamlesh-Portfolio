@@ -9,6 +9,7 @@
     "start": "node server/index.js",
     "build": "vite build",
     "preview": "vite preview",
+    "check": "npm run check:server",
     "check:server": "node --check server/index.js && node --check server/app.js && node --check server/config/env.js && node --check server/database.js && node --check server/models/Project.js && node --check server/middleware/auth.js && node --check server/middleware/errors.js && node --check server/routes/admin.js && node --check server/routes/projects.js && node --check server/scripts/hash-password.js && node --check server/scripts/seed-projects.js && node --check server/scripts/migrate-sqlite.js && node --check server/tests/env.test.js && node --test server/tests/*.test.js",
     "admin:hash": "node server/scripts/hash-password.js",
     "seed:projects": "node server/scripts/seed-projects.js",

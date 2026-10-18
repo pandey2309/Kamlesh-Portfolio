@@ -1,4 +1,7 @@
-const API_BASE = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '')
+// Production uses Vercel's same-origin rewrite; development keeps the Vite proxy.
+const API_BASE = import.meta.env.PROD
+  ? '/api'
+  : (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '')
 
 export async function apiRequest(path, options = {}) {
   let response

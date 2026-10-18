@@ -141,7 +141,7 @@ Then open `/admin` and sign in with your configured username and password. Add a
 | `JWT_SECRET` | Required signing secret, at least 32 characters. Generate a private random value as described above. |
 | `ADMIN_USERNAME` | Required administrator sign-in name. |
 | `ADMIN_PASSWORD_HASH` | Required bcrypt hash generated with `npm run admin:hash`. |
-| `VITE_API_BASE_URL` | Optional frontend API base path. Empty uses `/api`. For a separately hosted API, set at frontend build time to its URL including `/api`. This value is included in the public bundle; never put secrets in a `VITE_` variable. |
+| `VITE_API_BASE_URL` | Optional frontend API base path for local development. Production builds always use same-origin `/api` through the Vercel rewrite. This value is included in the public bundle; never put secrets in a `VITE_` variable. |
 | `API_PROXY_TARGET` | Optional full target URL for Vite’s local `/api` development proxy. By default it uses `http://127.0.0.1:<PORT>`. It does not configure a deployed static frontend. |
 | `SQLITE_PATH` | Optional source file path used only by `npm run migrate:sqlite`; defaults to `data/portfolio.sqlite`. It is not used by the running API. |
 | `TEST_DATABASE_URL` | Optional dedicated PostgreSQL test database URL. Set this outside `.env` to enable the database-backed API CRUD integration test. Use an empty, disposable test database, never production. |
@@ -186,6 +186,14 @@ Vite writes production assets to `dist/`. `npm run preview` previews those asset
 
 The `.gitignore` excludes `.env`, `.env.*` (except `.env.example`), `node_modules/`, `dist/`, and `data/`. Keep `DATABASE_URL`, JWT secrets, password hashes, and local database files out of GitHub. Commit only placeholder values in `.env.example`. Before pushing, review `git status` and confirm no private files or credentials are staged.
 
-Set API secrets in the hosting provider’s environment settings; do not upload `.env`. Build the frontend with `npm run build` and publish `dist/`. Run the Express API with `npm start`, and set `NODE_ENV=production`, `DATABASE_URL`, `JWT_SECRET`, `ADMIN_USERNAME`, `ADMIN_PASSWORD_HASH`, and `CLIENT_ORIGINS` in the API service. Configure the frontend host to rewrite `/admin` to `index.html`; route `/api/*` to the API for a same-origin setup. If frontend and API are hosted separately, set `VITE_API_BASE_URL` at build time and allow the exact frontend origin in `CLIENT_ORIGINS`.
+### Vercel frontend with Render API
 
-The admin cookie is `HttpOnly`, `Secure` in production, and `SameSite=Strict`. A same-origin frontend/API setup is simplest. Separate HTTPS subdomains under the same site can also work; unrelated frontend and API domains may block the strict cookie. Decide your host and domain layout before deployment.
+The included `vercel.json` sends `/api` and `/api/*` to `https://kamlesh-portfolio-17kj.onrender.com` before applying the SPA fallback to `/index.html`. This keeps API requests same-origin in the browser and lets routes such as `/admin` load the React application.
+
+In **Vercel**, import the existing repository and use the project root as the root directory. Set the framework preset to Vite (or let Vercel detect it), build command to `npm run build`, and output directory to `dist`. Do not add API credentials or secrets to Vercel. Remove any old `VITE_API_BASE_URL` setting that points directly to Render; production code uses `/api` regardless, but removing the stale setting avoids confusion. Redeploy after changing Vercel settings or this configuration.
+
+In **Render**, keep the existing PostgreSQL database and web service. Set the start command to `npm start` if it is not already configured. Set `NODE_ENV=production`, `DATABASE_URL`, `JWT_SECRET`, `ADMIN_USERNAME`, and `ADMIN_PASSWORD_HASH` in the Render service's environment settings. Set `CLIENT_ORIGINS` to the exact deployed Vercel origin, for example `https://your-project.vercel.app` (no trailing slash or path). Add any custom Vercel domain as another comma-separated exact origin. Never put these server secrets in Vercel or source control.
+
+After deployment, verify `https://YOUR-VERCEL-DOMAIN/api/health`, `https://YOUR-VERCEL-DOMAIN/api/projects`, and `https://YOUR-VERCEL-DOMAIN/admin`. Sign in and test project create, edit, and delete from the admin dashboard. The browser sees same-origin `/api` calls; Vercel forwards them to Render. The existing admin cookie remains `HttpOnly`, `Secure` in production, and `SameSite=Strict`.
+
+For other hosts, build the frontend with `npm run build` and publish `dist/`; run Express with `npm start`. Configure the frontend host to route `/api/*` to the API and send frontend routes such as `/admin` to `index.html`. If choosing a separate-origin API setup outside this Vercel configuration, ensure the exact frontend origin is allowed in `CLIENT_ORIGINS` and account for the existing strict-cookie policy.
